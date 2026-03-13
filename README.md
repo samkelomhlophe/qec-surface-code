@@ -1,10 +1,15 @@
 # Quantum Error Correction Surface Code Simulator
 
-Python implementation with neural decoder, realistic noise model, and threshold analysis.
+Python implementation of a surface code with neural-network decoder, realistic noise model, and threshold analysis.
 
-## Files
-- `main.py` — run the simulation
-- `src/` — core modules (surface_code.py, decoder, noise_model, etc.)
-- `paper/` — LaTeX files
+## Quick Start
+```bash
+python main.py
+```
 
-Run: `python main.py`
+## Structure
+- `main.py` — simulation runner  
+- `src/` — core modules (surface_code.py, decoder.py, noise_model.py, etc.)  
+- `paper/` — LaTeX files for the write-up
+
+Built on MacBook Air — ready for threshold plots, decoder training, etc.
