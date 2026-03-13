@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Big data files
+*.npy
+results.npy
+data/*.npy
+
+# LaTeX junk
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.toc
+
+# Keep nice figures
+!figures/*.png
