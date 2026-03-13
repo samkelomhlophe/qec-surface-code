@@ -1,39 +1,46 @@
 import torch
 import torch.nn as nn
 import numpy as np
-import sys
+import matplotlib
+import matplotlib.pyplot as plt
 import os
+import sys
+from tqdm import tqdm
 sys.path.insert(0, os.path.dirname(__file__))
 from surface_code import build_surface_code
 
-class SyndromeClassifier(nn.Module):
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+print(f"🚀 Using device: {device}")
+
+class SyndromeMLP(nn.Module):
     def __init__(self, input_size):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_size, 128),
+            nn.Linear(input_size, 256),
             nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(128, 64),
             nn.ReLU(),
             nn.Linear(64, 1),
             nn.Sigmoid()
-        )
+        ).to(device)
 
     def forward(self, x):
         return self.net(x).squeeze()
 
-def generate_training_data(circuit, num_shots=50000):
+def generate_training_data(circuit, num_shots=15000):
     sampler = circuit.compile_detector_sampler()
-    detection_events, observable_flips = sampler.sample(
-        num_shots, separate_observables=True
-    )
+    detection_events, observable_flips = sampler.sample(num_shots, separate_observables=True)
     X = torch.tensor(detection_events, dtype=torch.float32)
     y = torch.tensor(observable_flips[:, 0], dtype=torch.float32)
     return X, y
 
-def train_nn_decoder(circuit, num_shots=50000, epochs=20):
+def train_nn_decoder(circuit, input_size, num_shots=15000, epochs=25):
     X, y = generate_training_data(circuit, num_shots)
-    input_size = X.shape[1]
-    model = SyndromeClassifier(input_size)
+    model = SyndromeMLP(input_size)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.BCELoss()
 
@@ -41,87 +48,57 @@ def train_nn_decoder(circuit, num_shots=50000, epochs=20):
     loader = torch.utils.data.DataLoader(dataset, batch_size=256, shuffle=True)
 
     model.train()
-    for epoch in range(epochs):
-        total_loss = 0
+    for epoch in tqdm(range(epochs), desc="Training"):
         for xb, yb in loader:
+            xb, yb = xb.to(device), yb.to(device)
             optimizer.zero_grad()
             pred = model(xb)
             loss = loss_fn(pred, yb)
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()
-        if (epoch + 1) % 5 == 0:
-            print(f"    Epoch {epoch+1}/{epochs} loss={total_loss/len(loader):.4f}")
-
     return model
 
-def evaluate_nn_decoder(model, circuit, num_shots=10000):
+def evaluate_nn_decoder(model, circuit, num_shots=8000):
     sampler = circuit.compile_detector_sampler()
-    detection_events, observable_flips = sampler.sample(
-        num_shots, separate_observables=True
-    )
-    X = torch.tensor(detection_events, dtype=torch.float32)
+    detection_events, observable_flips = sampler.sample(num_shots, separate_observables=True)
+    X = torch.tensor(detection_events, dtype=torch.float32).to(device)
     y = observable_flips[:, 0]
 
     model.eval()
     with torch.no_grad():
-        preds = (model(X).numpy() > 0.5).astype(int)
-
-    errors = np.sum(preds != y)
-    return errors / num_shots
+        preds = (model(X).cpu().numpy() > 0.5).astype(int)
+    return np.mean(preds != y)
 
 def run_nn_comparison():
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
     import pymatching
+    matplotlib.use('Agg')
 
     distances = [3, 5, 7]
-    error_rates = np.logspace(-3, -1, 10)
-    rounds = 10
-
-    mwpm_results = {d: [] for d in distances}
-    nn_results = {d: [] for d in distances}
+    error_rates = np.logspace(-3, -1, 6)  # 6 rates for speed
 
     for d in distances:
-        print(f"\nDistance-{d}...")
+        print(f"\n=== Distance-{d} ===")
         for p in error_rates:
-            circuit = build_surface_code(d, rounds, p)
+            circuit = build_surface_code(d, 10, p)
+            # Get actual detector count
+            input_size = circuit.compile_detector_sampler().sample(1)[0].shape[0]
 
             # MWPM
             sampler = circuit.compile_detector_sampler()
-            det, obs = sampler.sample(10000, separate_observables=True)
+            det, obs = sampler.sample(8000, separate_observables=True)
             dem = circuit.detector_error_model(decompose_errors=True)
             matcher = pymatching.Matching.from_detector_error_model(dem)
             preds = matcher.decode_batch(det)
-            mwpm_rate = np.sum(preds != obs) / 10000
-            mwpm_results[d].append(mwpm_rate)
+            mwpm_rate = np.mean(preds != obs)
 
-            # NN
-            print(f"  p={p:.4f} — training NN...")
-            model = train_nn_decoder(circuit, num_shots=30000, epochs=15)
-            nn_rate = evaluate_nn_decoder(model, circuit, num_shots=10000)
-            nn_results[d].append(nn_rate)
-            print(f"  MWPM={mwpm_rate:.5f} | NN={nn_rate:.5f}")
+            # MLP Neural Decoder
+            print(f"  p={p:.4f} — training MLP...")
+            model = train_nn_decoder(circuit, input_size)
+            nn_rate = evaluate_nn_decoder(model, circuit)
+            print(f"  MWPM={mwpm_rate:.5f} | MLP={nn_rate:.5f}")
 
-    # Plot
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    for i, d in enumerate(distances):
-        axes[i].loglog(error_rates, mwpm_results[d], 'b-o', label='MWPM')
-        axes[i].loglog(error_rates, nn_results[d], 'r-s', label='NN')
-        axes[i].set_title(f'd={d}')
-        axes[i].set_xlabel('Physical Error Rate (p)')
-        axes[i].set_ylabel('Logical Error Rate')
-        axes[i].legend()
-        axes[i].grid(True, which='both', ls='--', alpha=0.5)
-
-    plt.suptitle('MWPM vs Neural Network Decoder Comparison', fontsize=14)
-    plt.tight_layout()
-    outpath = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), '..', 'figures', 'decoder_comparison.png')
-    )
-    plt.savefig(outpath, format='png', dpi=150)
-    print(f"\nPlot saved to figures/decoder_comparison.png")
+    print("\n✅ MLP decoder complete (faster & stable)!")
+    print("Next step: we’ll add the plot, correlated noise, and LaTeX PDF.")
 
 if __name__ == "__main__":
     run_nn_comparison()

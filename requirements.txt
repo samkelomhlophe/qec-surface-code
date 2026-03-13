@@ -3,3 +3,4 @@ pymatching
 torch
 numpy
 matplotlib
+tqdm

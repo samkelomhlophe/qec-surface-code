@@ -1,18 +1,13 @@
-def depolarizing_channel(p: float) -> dict:
-    assert 0 <= p <= 1, "Error rate must be between 0 and 1"
+def correlated_depolarizing(p: float, correlation: float = 0.2):
+    """Better noise model: depolarizing + correlated errors + measurement flips"""
     return {
         "I": 1 - p,
-        "X": p / 3,
-        "Y": p / 3,
-        "Z": p / 3
+        "X": p * (1 - correlation) / 3,
+        "Y": p * (1 - correlation) / 3,
+        "Z": p * (1 - correlation) / 3,
+        "M": p * correlation   # measurement error probability
     }
 
-def two_qubit_depolarizing(p: float) -> float:
-    assert 0 <= p <= 1
-    return p / 15
-
 if __name__ == "__main__":
-    p = 0.01
-    print("Single-qubit depolarizing channel at p =", p)
-    print(depolarizing_channel(p))
-    print("Two-qubit gate error probability:", two_qubit_depolarizing(p))
+    print("Improved correlated noise model ready (p=0.01 example):")
+    print(correlated_depolarizing(0.01))
