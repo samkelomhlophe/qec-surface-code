@@ -1,0 +1,42 @@
+ Depolarizing error channel for surface code simulation
+
+def depolarizing_channel(p: float) -> dict:
+    """
+    Single-qubit depolarizing channel.
+    With probability p, applies X, Y, or Z error each with probability p/3.
+    With probability 1-p, applies identity (no error).
+    
+    Parameters:
+        p: physical error rate (0 <= p <= 1)
+    
+    Returns:
+        dict of error probabilities
+    """
+    assert 0 <= p <= 1, "Error rate must be between 0 and 1"
+    return {
+        "I": 1 - p,
+        "X": p / 3,
+        "Y": p / 3,
+        "Z": p / 3
+    }
+
+def two_qubit_depolarizing(p: float) -> float:
+    """
+    Two-qubit depolarizing channel used for CNOT gates.
+    Standard Stim convention: p is the probability of any
+    non-identity two-qubit Pauli error (15 possibilities).
+    
+    Parameters:
+        p: two-qubit gate error rate
+    
+    Returns:
+        per-channel error probability
+    """
+    assert 0 <= p <= 1
+    return p / 15
+
+if __name__ == "__main__":
+    p = 0.01
+    print("Single-qubit depolarizing channel at p =", p)
+    print(depolarizing_channel(p))
+    print("\nTwo-qubit gate error probability:", two_qubit_depolarizing
