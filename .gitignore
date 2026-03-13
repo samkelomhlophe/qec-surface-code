@@ -1,0 +1,28 @@
+cat <<'EOF' > .gitignore
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Data & results (big files)
+*.npy
+results.npy
+data/*.npy
+
+# Temp LaTeX
+paper/*.aux
+paper/*.log
+paper/*.out
+
+# Keep these
+!figures/decoder_comparison.png
+!figures/threshold_plot.png
+EOF
